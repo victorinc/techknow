@@ -1,0 +1,30 @@
+
+critical_endpoints:
+    - /password.txt
+
+condition:
+  optional:
+    - one
+    - two
+
+rules:
+  one:
+    request:
+      method: GET
+      endpoint: /
+      headers:
+        x-source-platform: android # regex check
+      
+    response:
+      code: 301
+      body: openresty # regex check
+
+
+  two:
+    request:
+      method: GET
+      endpoint: /wp-login.php
+
+    response:
+      code: 403
+      body: 403 Forbidden # regex check

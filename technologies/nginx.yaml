@@ -1,0 +1,27 @@
+
+critical_endpoints:
+    - /logs
+
+condition:
+  required:
+    - one
+    - two
+
+rules:
+  one:
+    request:
+      method: GET
+      endpoint: /
+      
+    response:
+      code: 301
+      body: openresty # regex check
+
+  two:
+    request:
+      method: GET
+      endpoint: /logs
+      
+    response:
+      code: 404
+      body: nginx # regex check

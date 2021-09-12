@@ -1,0 +1,13 @@
+
+critical_endpoints:
+    - /metrics
+
+rules:
+  one:
+    request:
+      method: GET
+      endpoint: /
+      
+    response:
+      code: 200
+      # body: no explicit mapping for /error # regex check
