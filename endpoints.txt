@@ -1,0 +1,3 @@
+/metrics apache,php
+/logs nginx,apache
+/password.txt php,wordpress

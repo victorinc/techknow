@@ -3,6 +3,7 @@ const https = require("https");
 const yaml = require("js-yaml");
 const path = require("path");
 const config = require("./config");
+const endpoints = require("./endpoints");
 
 const urls = fs
   .readFileSync(`${path.resolve(__dirname)}/../hostnames.txt`)
@@ -22,19 +23,76 @@ try {
 
     alltechnologies.push({ name: technology, doc });
   }
-
-  // console.log(doc);
 } catch (e) {
   console.log(e);
 }
 
 for (let url of urls) {
-  makeRequest(url).then((res) => {
-    const { technology } = res || {};
+  makeRequest(url)
+    .then((res) => {
+      const { technology = [] } = res || {};
 
-    console.log(`for URL: ${url}, technologies present: \n`);
-    console.log(technology.join(", "));
-  });
+      console.log(`for URL: ${url}, technologies present: `);
+      console.log(technology.join(", "));
+      console.log("-----------------------------------------");
+
+      return technology;
+    })
+    .then(async (technologies) => {
+      let criticalEndpoints = [];
+      if (technologies.length === 0) {
+        for (const technology of Object.keys(endpoints)) {
+            const currentEndpoints = endpoints[technology] ? endpoints[technology] : [];
+          criticalEndpoints = [...criticalEndpoints, ...currentEndpoints];
+        }
+      } else {
+        for (const technology of technologies) {
+            const currentEndpoints = endpoints[technology] ? endpoints[technology] : [];
+          criticalEndpoints = [...criticalEndpoints, ...currentEndpoints];
+        }
+      }
+
+      await Promise.all([
+        ...criticalEndpoints.map(async (endpoint) => {
+            const options = getOptions(url, endpoint);
+            const isSuccess = await new Promise((resolve, reject) => {
+              try {
+                const req = https.request(options, async (res) => {
+                  const statusCheck = checkStatus(res.statusCode, { code: 200 });
+    
+                  if (statusCheck) {
+                    resolve(true);
+                  } else {
+                    resolve(false);
+                  }
+                });
+    
+                req.on("error", (e) => {
+                  console.error("req error:", e);
+                });
+                req.end();
+              } catch (error) {
+                console.log("error :: ", error);
+              }
+            });
+    
+            console.log(
+              `Url : ${url} with endpoint: ${endpoint} is ${
+                isSuccess ? "valid" : "not valid"
+              }`
+            );
+        })
+      ]);
+    });
+}
+
+function getOptions(url, endpoint = "/", method = "GET", headers = {}) {
+  return {
+    hostname: url,
+    path: endpoint,
+    method,
+    headers,
+  };
 }
 
 async function makeRequest(url, technologies = alltechnologies) {
@@ -50,14 +108,7 @@ async function makeRequest(url, technologies = alltechnologies) {
         response = {},
       } = rules[rule] || {};
 
-      let options = {
-        hostname: url,
-        path: endpoint,
-        method,
-        headers,
-      };
-
-      // console.log("options: ", options);
+      const options = getOptions(url, endpoint, method, headers);
 
       const isTech = await new Promise((resolve, reject) => {
         try {
@@ -68,9 +119,6 @@ async function makeRequest(url, technologies = alltechnologies) {
 
             const bodyCheck = await checkBody(res, response);
 
-            // console.log("res.statusCode", res.statusCode);
-            // console.log("statusCheck, headerCheck, bodyCheck", {statusCheck, headerCheck, bodyCheck});
-
             if (statusCheck && headerCheck && bodyCheck) {
               resolve(true);
             } else {
@@ -79,7 +127,6 @@ async function makeRequest(url, technologies = alltechnologies) {
           });
 
           req.on("error", (e) => {
-            // reject(e);
             console.error("req error:", e);
           });
           req.end();
@@ -89,14 +136,14 @@ async function makeRequest(url, technologies = alltechnologies) {
       });
 
       rulesValid[rule] = isTech;
-
-      // console.log(`rule ${rule} success for ${name}? `, isTech);
-      // check for critical endpoints
     }
 
     const { required = [], optional = [] } = condition || {};
 
-    let conditionCheck = Object.keys(rulesValid).reduce((key, value) =>  rulesValid[value] || key, null);
+    let conditionCheck = Object.keys(rulesValid).reduce(
+      (key, value) => rulesValid[value] || key,
+      null
+    );
     if (required.length > 1) {
       for (let key of required) {
         conditionCheck =
@@ -113,8 +160,6 @@ async function makeRequest(url, technologies = alltechnologies) {
             : conditionCheck || rulesValid[key];
       }
     }
-
-    //   console.log(`Technology ${name} present: `, conditionCheck);
 
     if (conditionCheck) {
       presentTechnologies.push(name);
@@ -158,7 +203,6 @@ async function checkBody(res, response) {
 
       res.on("end", () => {
         const { body = "" } = response || {};
-        // console.log("body: ", responseBody);
         const pattern = new RegExp(body, "g");
 
         resolve(pattern.test(responseBody));
